@@ -285,6 +285,53 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 
   /* iOS Safari zooms the page in if a focused input's font-size is under 16px */
   .input,.timeinput,textarea.input{font-size:16px}
+
+  /* ── Mobile-only: add-panel & detail-panel become overlay sheets ──
+     PC layout/behaviour is untouched — everything below lives inside
+     this max-width:640px query only. */
+
+  /* Trigger button shown in the top bar instead of the inline toggle */
+  .mobile-add-btn{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+    font-family:var(--disp);font-size:12.5px;font-weight:600;color:#fff;
+    background:var(--ink);border:1px solid var(--ink);border-radius:8px;
+    padding:8px 12px;cursor:pointer;order:2}
+  .mobile-add-btn:active{opacity:.85}
+  .live-clock{order:3}
+  body.sheet-open .mobile-add-btn{display:none} /* avoid a duplicate trigger while a sheet is open */
+
+  /* The inline accordion toggle is replaced by the top-bar button */
+  .add-toggle{display:none}
+
+  /* RIGHT — add-form becomes a bottom sheet, hidden until opened */
+  .right{display:none}
+  .app.form-open .right{
+    display:flex;align-items:flex-end;justify-content:center;
+    position:fixed;inset:0;z-index:60;padding:0;background:rgba(29,33,43,.45)}
+  .app.form-open .right .add-form{
+    display:block;width:100%;max-height:85vh;margin:0;overflow-y:auto;position:relative;
+    background:var(--panel);border-radius:16px 16px 0 0;
+    padding:22px 18px calc(18px + env(safe-area-inset-bottom));
+    box-shadow:0 -10px 30px rgba(0,0,0,.25)}
+
+  /* LEFT — event detail becomes a bottom sheet, hidden until an event is selected */
+  .left{display:none}
+  .left.open{
+    display:flex;align-items:flex-end;justify-content:center;
+    position:fixed;inset:0;z-index:60;padding:0;border-top:none;
+    background:rgba(29,33,43,.45)}
+  .left.open #inspector{
+    width:100%;max-height:85vh;overflow-y:auto;position:relative;
+    background:var(--panel);border-radius:16px 16px 0 0;
+    padding:22px 18px calc(18px + env(safe-area-inset-bottom))}
+
+  /* Shared close (✕) control for both sheets */
+  .mobile-panel-close{display:flex;align-items:center;justify-content:center;
+    position:absolute;top:14px;right:14px;width:32px;height:32px;
+    border:1px solid var(--line);border-radius:50%;background:var(--soft);
+    color:var(--muted);font-size:14px;line-height:1;cursor:pointer;z-index:1}
+  .mobile-panel-close:active{background:var(--line-2)}
+
+  body.sheet-open{overflow:hidden}
 }
 </style>
 </head>
@@ -295,6 +342,9 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
   <span class="topdate" id="topDate"></span>
   <span class="spacer"></span>
   <span class="resetnote">毎日 2:30 リセット</span>
+  <button class="mobile-add-btn" id="mobileAddBtn" type="button" aria-haspopup="dialog" aria-controls="addForm">
+    <span class="at-icon" style="display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center">+</span>予定を追加
+  </button>
   <span class="live-clock" id="liveClock">--:--</span>
 </div>
 
@@ -335,6 +385,7 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
     </button>
 
     <div class="add-form" id="addForm" hidden>
+    <button type="button" class="mobile-panel-close" id="formPanelClose" aria-label="閉じる">✕</button>
     <p class="lead">内容と開始・終了時刻、詳細を入れて追加します。詳細はタイムラインには表示されません。</p>
 
     <div class="field">
@@ -557,10 +608,18 @@ function selectEvent(id){
 
 function renderInspector(){
   const host = document.getElementById('inspector');
+  const leftSection = document.querySelector('.left');
   const e = events.find(x => x.id === selectedId);
-  if (!e){ host.innerHTML = ''; return; }     // nothing selected → show nothing
+  if (!e){
+    host.innerHTML = '';                 // nothing selected → show nothing
+    leftSection.classList.remove('open');
+    updateSheetLock();
+    return;
+  }
+  leftSection.classList.add('open');     // mobile: reveals the detail sheet
 
   host.innerHTML = `
+    <button type="button" class="mobile-panel-close" id="iClose" aria-label="閉じる">✕</button>
     <div class="insp-eyebrow">選択中の予定</div>
     <div class="insp-field">
       <label for="iTitle">内容</label>
@@ -624,10 +683,15 @@ function renderInspector(){
   });
   host.querySelector('#iDelete').addEventListener('click', () => removeEvent(e.id));
 
+  // Mobile-only close control for the detail sheet (deselects, same as tapping the backdrop)
+  host.querySelector('#iClose').addEventListener('click', () => { selectedId = null; renderEvents(); renderInspector(); });
+
   // Enter saves (title textarea: prevent newline). Details: Enter = newline.
   iTitle.addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); host.querySelector('#iSave').click(); } });
   [iStart, iEnd].forEach(el =>
     el.addEventListener('keydown', ev => { if (ev.key === 'Enter') host.querySelector('#iSave').click(); }));
+
+  updateSheetLock();
 }
 
 // ── CRUD ───────────────────────────────────────────────────
@@ -700,13 +764,30 @@ document.getElementById('addBtn').addEventListener('click', submit);
 const addToggle = document.getElementById('addToggle');
 const addForm   = document.getElementById('addForm');
 const appEl     = document.querySelector('.app');
+const isMobile  = () => window.matchMedia('(max-width:640px)').matches;
+function updateSheetLock(){
+  const open = appEl.classList.contains('form-open') || document.querySelector('.left').classList.contains('open');
+  document.body.classList.toggle('sheet-open', isMobile() && open);
+}
 function setAddForm(open){
   appEl.classList.toggle('form-open', open);
   addToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (open){ addForm.removeAttribute('hidden'); rTitle.focus(); }
   else { addForm.setAttribute('hidden', ''); }
+  updateSheetLock();
 }
 addToggle.addEventListener('click', () => setAddForm(!appEl.classList.contains('form-open')));
+
+// Mobile-only: top-bar "予定を追加" button opens the same form as a bottom sheet
+document.getElementById('mobileAddBtn').addEventListener('click', () => setAddForm(true));
+document.getElementById('formPanelClose').addEventListener('click', () => setAddForm(false));
+// Tapping the dimmed backdrop (outside the sheet) closes it — mobile only
+document.querySelector('.right').addEventListener('click', ev => {
+  if (isMobile() && ev.target === ev.currentTarget) setAddForm(false);
+});
+document.querySelector('.left').addEventListener('click', ev => {
+  if (isMobile() && ev.target === ev.currentTarget){ selectedId = null; renderEvents(); renderInspector(); }
+});
 
 // ── Init ───────────────────────────────────────────────────
 (function init(){
