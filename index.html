@@ -231,12 +231,60 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 
-@media (max-width:920px){
+/* ── Tablet / narrow desktop ─────────────── */
+@media (max-width:920px) and (min-width:641px){
   body{overflow:auto}
   .app,.app.form-open{grid-template-columns:1fr}
   .left{order:3} .center{order:1} .right{order:2;align-items:flex-start}
   .col{min-height:auto}
-  .track-scroll{height:50vh}
+  .track-scroll{height:56vh}
+  .event-del{opacity:1}
+}
+
+/* ── Smartphone ───────────────────────────── */
+@media (max-width:640px){
+  html{-webkit-text-size-adjust:100%}
+  body{overflow:auto;font-size:13.5px}
+
+  .topbar{flex-wrap:wrap;row-gap:6px;padding:12px 14px}
+  .brand{font-size:15.5px}
+  .topdate{font-size:11.5px}
+  .resetnote{display:none}                 /* secondary info, saves space on phones */
+  .live-clock{font-size:12.5px;margin-left:auto}
+
+  .app,.app.form-open{grid-template-columns:1fr;min-height:0}
+  .left{order:3;border-right:none;border-top:1px solid var(--line);padding:18px 16px}
+  .center{order:1}
+  .right{order:2;align-items:stretch;padding:14px 14px 0}
+  .app.form-open .right{padding:18px 16px}
+  .col{min-height:auto}
+
+  .center-head{padding:14px 16px 10px}
+  .track-scroll{height:58vh;padding:0 14px 22px}
+  .hour-label{width:34px;font-size:10px}
+  .hour-line{left:44px}
+  .lane{left:44px;right:2px}
+  .nowline{left:32px;right:2px}
+  .nowline .now-pill{left:-32px;font-size:10px;padding:2px 5px}
+
+  /* Touch devices have no hover — keep delete controls reachable at all times */
+  .event-del{opacity:1;top:1px;right:1px;font-size:13px;padding:5px 7px}
+  .event-title{font-size:12px}
+  .event-time{font-size:10px}
+
+  .add-toggle{font-size:13px;padding:10px}
+  .app.form-open .add-toggle{font-size:14px;padding:13px 14px}
+
+  .time-row,.time-pair{flex-wrap:wrap}
+  .btn{padding:13px}
+  .insp-actions{flex-wrap:wrap}
+  .task-add-row{flex-wrap:nowrap}
+
+  #toast{left:50%;bottom:16px;font-size:12.5px;padding:8px 14px;max-width:90vw;
+    white-space:normal;text-align:center}
+
+  /* iOS Safari zooms the page in if a focused input's font-size is under 16px */
+  .input,.timeinput,textarea.input{font-size:16px}
 }
 </style>
 </head>
@@ -315,16 +363,6 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
     <div class="field">
       <label for="rDetails">詳細</label>
       <textarea class="input" id="rDetails" placeholder="メモ・場所・持ち物など（任意）"></textarea>
-    </div>
-
-    <div class="field">
-      <label>タスク <span class="sub-label">（この予定で達成したいこと）</span></label>
-      <div class="task-list" id="rTaskList"></div>
-      <div class="task-add-row">
-        <input class="input" id="rTaskInput" type="text" maxlength="120"
-               placeholder="タスクを入力して追加" autocomplete="off">
-        <button class="btn-mini" id="rTaskAdd" type="button" aria-label="タスクを追加">+</button>
-      </div>
     </div>
 
     <label class="check-row" for="rDone" style="margin-bottom:16px">
@@ -517,23 +555,13 @@ function selectEvent(id){
   renderInspector();
 }
 
-function findCurrentEvent(){
-  const min = nowMinutes();
-  return events.find(ev => timeToMin(ev.start) <= min && min < Math.max(timeToMin(ev.end), timeToMin(ev.start) + 1));
-}
-
 function renderInspector(){
   const host = document.getElementById('inspector');
-  let e = events.find(x => x.id === selectedId);
-  let autoShown = false;
-  if (!e){
-    e = findCurrentEvent();
-    autoShown = !!e;
-  }
-  if (!e){ host.innerHTML = ''; return; }     // nothing selected and nothing current → show nothing
+  const e = events.find(x => x.id === selectedId);
+  if (!e){ host.innerHTML = ''; return; }     // nothing selected → show nothing
 
   host.innerHTML = `
-    <div class="insp-eyebrow">${autoShown ? '現在の予定' : '選択中の予定'}</div>
+    <div class="insp-eyebrow">選択中の予定</div>
     <div class="insp-field">
       <label for="iTitle">内容</label>
       <textarea class="input grow" id="iTitle" rows="1" maxlength="120"></textarea>
@@ -551,15 +579,6 @@ function renderInspector(){
     <div class="insp-field">
       <label for="iDetails">詳細</label>
       <textarea class="input grow" id="iDetails" placeholder="メモ・場所・持ち物など（任意）"></textarea>
-    </div>
-    <div class="insp-field">
-      <label>タスク <span class="sub-label">（この予定で達成したいこと）</span></label>
-      <div class="task-list" id="iTaskList"></div>
-      <div class="task-add-row">
-        <input class="input" id="iTaskInput" type="text" maxlength="120"
-               placeholder="タスクを入力して追加" autocomplete="off">
-        <button class="btn-mini" id="iTaskAdd" type="button" aria-label="タスクを追加">+</button>
-      </div>
     </div>
     <label class="check-row" for="iDone" style="margin-bottom:2px">
       <input type="checkbox" id="iDone"> 完了
@@ -583,47 +602,6 @@ function renderInspector(){
   const iDone = host.querySelector('#iDone');
   iDone.checked = !!e.done;
   iDone.addEventListener('change', () => { e.done = iDone.checked; save(); renderEvents(); });
-
-  // Task checklist — each task has its own checkbox; changes apply immediately.
-  if (!Array.isArray(e.tasks)) e.tasks = [];
-  const iTaskList  = host.querySelector('#iTaskList');
-  const iTaskInput = host.querySelector('#iTaskInput');
-  const iTaskAdd   = host.querySelector('#iTaskAdd');
-
-  function renderITasks(){
-    iTaskList.innerHTML = '';
-    e.tasks.forEach(t => {
-      const row = document.createElement('div');
-      row.className = 'task-item' + (t.done ? ' done' : '');
-      row.innerHTML =
-        `<input type="checkbox" class="task-check">` +
-        `<span class="task-text-static"></span>` +
-        `<button class="task-del" type="button" aria-label="タスクを削除">✕</button>`;
-      row.querySelector('.task-text-static').textContent = t.text;
-      const cb = row.querySelector('.task-check');
-      cb.checked = !!t.done;
-      cb.addEventListener('change', () => {
-        t.done = cb.checked; save(); renderITasks();
-      });
-      row.querySelector('.task-del').addEventListener('click', () => {
-        e.tasks = e.tasks.filter(x => x.id !== t.id);
-        save(); renderITasks();
-      });
-      iTaskList.appendChild(row);
-    });
-  }
-  function addITask(){
-    const v = iTaskInput.value.trim();
-    if (!v) return;
-    e.tasks.push({ id: uid(), text: v, done: false });
-    iTaskInput.value = '';
-    save(); renderITasks(); iTaskInput.focus();
-  }
-  iTaskAdd.addEventListener('click', addITask);
-  iTaskInput.addEventListener('keydown', ev => {
-    if (ev.key === 'Enter'){ ev.preventDefault(); addITask(); }
-  });
-  renderITasks();
 
   // Typed-only time inputs
   attachTimeInput(iStart);
@@ -667,7 +645,6 @@ function renderNow(){
   document.getElementById('nowline').style.top = ((nowMinutes()-START_HOUR*60)/60)*PX_HOUR + 'px';
   document.querySelector('#nowline .now-pill').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
   document.getElementById('liveClock').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
-  if (!selectedId) renderInspector();
 }
 function scrollToTime(min){
   const sc = document.getElementById('trackScroll');
@@ -690,45 +667,9 @@ const rTitle   = document.getElementById('rTitle');
 const rStart   = document.getElementById('rStart');
 const rEnd     = document.getElementById('rEnd');
 const rDetails = document.getElementById('rDetails');
-const rTaskList  = document.getElementById('rTaskList');
-const rTaskInput = document.getElementById('rTaskInput');
-const rTaskAdd   = document.getElementById('rTaskAdd');
 
 attachTimeInput(rStart);
 attachTimeInput(rEnd);
-
-// Pending tasks for the event currently being composed in the right form.
-let rTasks = [];
-
-function renderRTasks(){
-  rTaskList.innerHTML = '';
-  rTasks.forEach((t, idx) => {
-    const row = document.createElement('div');
-    row.className = 'task-item';
-    row.innerHTML =
-      `<span class="task-bullet"></span>` +
-      `<span class="task-text-static"></span>` +
-      `<button class="task-del" type="button" aria-label="タスクを削除">✕</button>`;
-    row.querySelector('.task-text-static').textContent = t;
-    row.querySelector('.task-del').addEventListener('click', () => {
-      rTasks.splice(idx, 1); renderRTasks();
-    });
-    rTaskList.appendChild(row);
-  });
-}
-
-function addRTask(){
-  const v = rTaskInput.value.trim();
-  if (!v) return;
-  rTasks.push(v);
-  rTaskInput.value = '';
-  renderRTasks();
-  rTaskInput.focus();
-}
-rTaskAdd.addEventListener('click', addRTask);
-rTaskInput.addEventListener('keydown', ev => {
-  if (ev.key === 'Enter'){ ev.preventDefault(); addRTask(); }
-});
 
 function flash(el){ el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); el.focus(); }
 
@@ -741,13 +682,11 @@ function submit(){
   if (!end){   flash(rEnd);   return; }
   if (timeToMin(end) <= timeToMin(start)){ flash(rEnd); return; }
 
-  const tasks = rTasks.map(text => ({ id: uid(), text, done: false }));
-  events.push({ id: uid(), title, start, end, details: rDetails.value.trim(), tasks });
+  events.push({ id: uid(), title, start, end, details: rDetails.value.trim() });
   sortEvents(); save(); renderEvents(); scrollToTime(timeToMin(start));
 
   // Chain the next entry: start = previous end, end = +1h.
   rTitle.value = ''; rDetails.value = '';
-  rTasks = []; renderRTasks();
   rStart.value = start ? end : '';
   rEnd.value   = end ? minToTime(timeToMin(end) + 60) : '';
   rTitle.focus();
