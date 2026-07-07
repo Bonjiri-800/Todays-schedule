@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>今日の予定</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --ink:    #1d212b;
+  --paper:  #e8ecf2;
+  --panel:  #ffffff;
+  --soft:   #f2f5f9;
+  --line:   #d3dae4;
+  --line-2: #e3e8ef;
+  --muted:  #79839a;
+  --faint:  #aab2c2;
+  --now:    #ef8b3b;   /* warm hue — reserved for "now" only */
+  --sel:    #3f6ea5;   /* cool blue — reserved for the selected event */
+  --done:   #16a34a;   /* green — completed state */
+  --focus:  rgba(63,110,165,.26);
+  --danger: #d4483a;
+
+  --disp: 'Space Grotesk','Noto Sans JP',system-ui,sans-serif;
+  --body: 'Noto Sans JP','Space Grotesk',system-ui,sans-serif;
+  --mono: 'JetBrains Mono',ui-monospace,'SF Mono',Consolas,monospace;
+}
+
+html,body{height:100%}
+body{
+  font-family:var(--body);font-size:14px;color:var(--ink);background:var(--paper);
+  overflow:hidden;display:grid;grid-template-rows:auto 1fr;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Top bar ─────────────────────────────── */
+.topbar{display:flex;align-items:baseline;gap:16px;padding:16px 26px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{font-family:var(--disp);font-weight:700;font-size:17px}
+.brand .dot{color:var(--now)}
+.topdate{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+.topbar .spacer{flex:1}
+.resetnote{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.live-clock{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink);
+  display:flex;align-items:center;gap:7px}
+.live-clock::before{content:"";width:7px;height:7px;border-radius:50%;
+  background:var(--now);box-shadow:0 0 0 3px rgba(239,139,59,.18)}
+
+/* ── 3-column frame ──────────────────────── */
+.app{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,4fr) auto;min-height:0}
+.app.form-open{grid-template-columns:minmax(0,7fr) minmax(0,7fr) minmax(0,6fr)}
+.col{min-height:0;display:flex;flex-direction:column}
+
+/* ── LEFT: detail inspector (empty until an event is selected) ── */
+.left{border-right:1px solid var(--line);background:var(--panel);
+  padding:22px 20px;overflow-y:auto}
+#inspector:empty{display:none}
+.insp-eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--sel);margin-bottom:14px}
+.insp-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.insp-field label{font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--muted)}
+.insp-field .sub-label{font-weight:500;color:var(--faint);font-size:10px}
+.time-row{display:flex;gap:10px;align-items:flex-end}
+.time-row .insp-field{flex:1;margin-bottom:0}
+.time-row .sep{color:var(--faint);padding-bottom:11px;font-size:13px}
+.insp-actions{display:flex;gap:8px;margin-top:18px}
+
+/* ── CENTER: timeline ────────────────────── */
+.center{background:var(--paper)}
+.center-head{display:flex;align-items:center;justify-content:space-between;padding:16px 22px 12px}
+.center-head h2{font-family:var(--disp);font-size:13px;font-weight:600}
+.center-head .count{font-family:var(--mono);font-size:12px;color:var(--muted);
+  background:var(--soft);border:1px solid var(--line-2);padding:3px 10px;border-radius:999px}
+
+.track-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;position:relative;padding:0 22px 28px}
+.track{position:relative}
+
+.hour{position:absolute;left:0;right:0;height:0;pointer-events:none}
+.hour-label{position:absolute;left:0;top:-7px;width:46px;text-align:right;
+  font-family:var(--mono);font-size:11px;color:var(--faint)}
+.hour-line{position:absolute;left:58px;right:4px;top:0;border-top:1px solid var(--line-2)}
+.hour.sharp .hour-line{border-top-color:var(--line)}
+.hour.sharp .hour-label{color:var(--muted)}
+
+.lane{position:absolute;left:58px;right:4px;top:0;bottom:0}
+
+.event{position:absolute;display:flex;flex-direction:column;gap:2px;
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--ink);
+  border-radius:8px;padding:5px 9px;overflow:hidden;cursor:pointer;
+  box-shadow:0 1px 2px rgba(29,33,43,.05);
+  transition:box-shadow .15s,border-color .12s,transform .08s}
+.event:hover{box-shadow:0 5px 16px rgba(29,33,43,.13);z-index:6}
+.event.selected{border-color:var(--sel);border-left-color:var(--sel);
+  box-shadow:0 0 0 2px rgba(63,110,165,.28),0 5px 16px rgba(29,33,43,.1);z-index:7}
+.event-time{font-family:var(--mono);font-size:10.5px;font-weight:600;color:var(--muted);white-space:nowrap}
+.event.selected .event-time{color:var(--sel)}
+.event-title{font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+.event.done{opacity:.6;border-left-color:var(--done)}
+.event.done .event-time{color:var(--done)}
+.event.done .event-title{text-decoration:line-through;color:var(--muted)}
+.event.done.selected{opacity:.85}
+.event-del{position:absolute;top:2px;right:2px;border:none;background:transparent;
+  color:var(--faint);font-size:12px;cursor:pointer;padding:3px 5px;border-radius:6px;
+  opacity:0;transition:opacity .15s,color .15s,background .15s;line-height:1}
+.event:hover .event-del{opacity:1}
+.event-del:hover{color:var(--danger);background:#fdecea}
+
+/* now line — signature element */
+.nowline{position:absolute;left:46px;right:4px;height:0;z-index:9;pointer-events:none;transition:top .4s ease}
+.nowline .now-rail{position:absolute;left:12px;right:0;top:0;border-top:2px solid var(--now)}
+.nowline .now-pill{position:absolute;left:-46px;top:-9px;font-family:var(--mono);
+  font-size:11px;font-weight:600;color:#fff;background:var(--now);padding:2px 6px;
+  border-radius:5px;box-shadow:0 2px 6px rgba(239,139,59,.4)}
+.nowline .now-knob{position:absolute;left:9px;top:-3px;width:7px;height:7px;border-radius:50%;
+  background:var(--now);box-shadow:0 0 0 3px rgba(239,139,59,.2)}
+
+/* empty state */
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:7px;text-align:center;color:var(--muted);pointer-events:none}
+.empty .big{font-family:var(--disp);font-size:15px;font-weight:600;color:var(--ink)}
+.empty .sub{font-size:12.5px;color:var(--muted)}
+
+/* ── RIGHT: add form ─────────────────────── */
+.right{background:transparent;padding:14px 12px;overflow-y:auto;align-items:flex-end}
+.app.form-open .right{background:var(--panel);border-left:1px solid var(--line);
+  padding:22px 20px;align-items:stretch}
+.right h2{font-family:var(--disp);font-size:13px;font-weight:600;margin-bottom:4px}
+.right .lead{font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.5}
+
+/* add-form toggle — compact when off, full-width header when on */
+.add-toggle{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
+  font-family:var(--disp);font-size:12.5px;font-weight:600;color:var(--ink);
+  background:var(--soft);border:1px solid var(--line);border-radius:8px;
+  padding:8px 11px;cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s}
+.add-toggle:hover{background:var(--line-2)}
+.add-toggle .at-icon{display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;border-radius:5px;background:var(--ink);color:#fff;
+  font-size:14px;line-height:1;flex-shrink:0;transition:transform .2s,background .15s}
+
+.app.form-open .add-toggle{display:flex;width:100%;font-size:14px;padding:12px 14px;
+  background:var(--ink);color:#fff;border-color:var(--ink);border-radius:9px}
+.app.form-open .add-toggle:hover{opacity:.92;background:var(--ink)}
+.app.form-open .add-toggle .at-icon{width:20px;height:20px;font-size:16px;
+  background:rgba(255,255,255,.22);transform:rotate(45deg)}
+
+.add-form{margin-top:16px}
+.add-form[hidden]{display:none}
+
+/* task editor — right-form pending list + left-inspector checklist */
+.task-add-row{display:flex;gap:8px;align-items:center}
+.task-add-row .input{flex:1}
+.btn-mini{flex-shrink:0;width:38px;height:38px;border:1px solid var(--line);
+  background:var(--soft);border-radius:9px;font-size:17px;line-height:1;color:var(--ink);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.btn-mini:hover{background:var(--line-2)}
+.task-list{display:flex;flex-direction:column;gap:6px}
+.task-list:not(:empty){margin-bottom:8px}
+.task-item{display:flex;align-items:center;gap:9px;background:var(--soft);
+  border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.task-bullet{width:6px;height:6px;border-radius:50%;background:var(--faint);flex-shrink:0;margin:0 4px}
+.task-check{flex-shrink:0;width:17px;height:17px;border:1.5px solid var(--muted);border-radius:5px;
+  appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;
+  transition:background .15s,border-color .15s}
+.task-check:checked{background:var(--sel);border-color:var(--sel);
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 10 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4l3 3 5-6' stroke='white' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:center}
+.task-text{flex:1;min-width:0;border:none;background:transparent;outline:none;
+  font-family:var(--body);font-size:13px;color:var(--ink)}
+.task-text-static{flex:1;min-width:0;font-size:13px;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-item.done .task-text{text-decoration:line-through;color:var(--muted)}
+.task-del{flex-shrink:0;border:none;background:transparent;color:var(--faint);cursor:pointer;
+  font-size:12px;padding:3px 5px;border-radius:6px;line-height:1}
+.task-del:hover{color:var(--danger);background:#fdecea}
+
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
+.field label{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted)}
+.field .sub-label{font-weight:500;color:var(--faint);font-size:10px}
+
+.input,.timeinput,textarea.input{font-family:var(--body);font-size:14px;color:var(--ink);
+  background:var(--soft);border:1px solid var(--line);border-radius:9px;padding:11px 12px;
+  outline:none;width:100%;transition:border-color .15s,box-shadow .15s,background .15s}
+.timeinput{font-family:var(--mono);font-weight:600;letter-spacing:.04em}
+textarea.input{resize:none;min-height:80px;line-height:1.55}
+/* auto-grow fields (left inspector): box height follows the text, no inner scroll */
+textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
+.input::placeholder,textarea.input::placeholder{color:var(--faint)}
+.input:focus,.timeinput:focus,textarea.input:focus{
+  background:var(--panel);border-color:var(--sel);box-shadow:0 0 0 4px var(--focus)}
+.timeinput.invalid{border-color:var(--danger);box-shadow:0 0 0 4px rgba(212,72,58,.15)}
+.input.shake,.timeinput.shake,textarea.shake{animation:shake .35s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+
+.time-pair{display:flex;gap:10px;align-items:flex-end}
+.time-pair .field{flex:1;margin-bottom:0}
+.time-pair .sep{color:var(--faint);padding-bottom:11px}
+
+.check-row{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;
+  color:var(--ink);cursor:pointer;user-select:none}
+.check-row input{width:16px;height:16px;accent-color:var(--done);cursor:pointer;margin:0}
+
+.btn{font-family:var(--disp);font-size:14px;font-weight:600;border:none;border-radius:9px;
+  padding:12px;cursor:pointer;transition:opacity .15s,transform .08s}
+.btn:active{transform:scale(.985)}
+.btn-primary{background:var(--ink);color:#fff;width:100%}
+.btn-primary:hover{opacity:.9}
+.btn-danger{color:var(--danger);background:#fdecea;border:1px solid #f6cfc9}
+.btn-danger:hover{background:#f9ddd9}
+.insp-actions .btn{flex:1}
+
+.right .hint{margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2);
+  font-size:11.5px;color:var(--muted);line-height:1.7}
+.right .hint kbd{font-family:var(--mono);font-size:10.5px;background:var(--soft);
+  border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink)}
+
+/* toast */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:var(--ink);color:#fff;font-size:13px;padding:9px 18px;border-radius:8px;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:99;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.track-scroll::-webkit-scrollbar,.left::-webkit-scrollbar,.right::-webkit-scrollbar{width:6px}
+.track-scroll::-webkit-scrollbar-thumb,.left::-webkit-scrollbar-thumb,.right::-webkit-scrollbar-thumb{background:var(--line);border-radius:99px}
+.track-scroll::-webkit-scrollbar-track{background:transparent}
+:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+@media (max-width:920px){
+  body{overflow:auto}
+  .app,.app.form-open{grid-template-columns:1fr}
+  .left{order:3} .center{order:1} .right{order:2;align-items:flex-start}
+  .col{min-height:auto}
+  .track-scroll{height:50vh}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand">今日の予定<span class="dot">.</span></span>
+  <span class="topdate" id="topDate"></span>
+  <span class="spacer"></span>
+  <span class="resetnote">毎日 2:30 リセット</span>
+  <span class="live-clock" id="liveClock">--:--</span>
+</div>
+
+<div class="app">
+
+  <!-- LEFT — detail inspector (empty until selection) -->
+  <section class="col left">
+    <div id="inspector"></div>
+  </section>
+
+  <!-- CENTER — timeline (titles + time only, no details) -->
+  <section class="col center">
+    <div class="center-head">
+      <h2>タイムライン</h2>
+      <span class="count" id="count">0 件</span>
+    </div>
+    <div class="track-scroll" id="trackScroll">
+      <div class="track" id="track">
+        <div id="ruler"></div>
+        <div class="lane" id="lane"></div>
+        <div class="nowline" id="nowline">
+          <span class="now-pill">--:--</span>
+          <span class="now-knob"></span>
+          <span class="now-rail"></span>
+        </div>
+      </div>
+      <div class="empty" id="empty">
+        <span class="big">まだ予定がありません</span>
+        <span class="sub">右のフォームから内容・時間・詳細を追加できます</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT — add form -->
+  <section class="col right">
+    <button class="add-toggle" id="addToggle" type="button" aria-expanded="false" aria-controls="addForm">
+      <span class="at-icon">+</span><span>予定を追加</span>
+    </button>
+
+    <div class="add-form" id="addForm" hidden>
+    <p class="lead">内容と開始・終了時刻、詳細を入れて追加します。詳細はタイムラインには表示されません。</p>
+
+    <div class="field">
+      <label for="rTitle">内容</label>
+      <input class="input" id="rTitle" type="text" maxlength="120"
+             placeholder="例：チームMTG / ランチ / 散歩" autocomplete="off">
+    </div>
+
+    <div class="field" style="margin-bottom:16px">
+      <label>時間 <span class="sub-label">（HH:MM を入力）</span></label>
+      <div class="time-pair">
+        <div class="field" style="margin-bottom:0">
+          <label for="rStart" class="sub-label">開始</label>
+          <input class="timeinput" id="rStart" type="text" inputmode="numeric"
+                 maxlength="5" placeholder="HH:MM" autocomplete="off">
+        </div>
+        <span class="sep">–</span>
+        <div class="field" style="margin-bottom:0">
+          <label for="rEnd" class="sub-label">終了</label>
+          <input class="timeinput" id="rEnd" type="text" inputmode="numeric"
+                 maxlength="5" placeholder="HH:MM" autocomplete="off">
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="rDetails">詳細</label>
+      <textarea class="input" id="rDetails" placeholder="メモ・場所・持ち物など（任意）"></textarea>
+    </div>
+
+    <div class="field">
+      <label>タスク <span class="sub-label">（この予定で達成したいこと）</span></label>
+      <div class="task-list" id="rTaskList"></div>
+      <div class="task-add-row">
+        <input class="input" id="rTaskInput" type="text" maxlength="120"
+               placeholder="タスクを入力して追加" autocomplete="off">
+        <button class="btn-mini" id="rTaskAdd" type="button" aria-label="タスクを追加">+</button>
+      </div>
+    </div>
+
+    <label class="check-row" for="rDone" style="margin-bottom:16px">
+      <input type="checkbox" id="rDone"> 完了として追加
+    </label>
+
+    <button class="btn btn-primary" id="addBtn">追加</button>
+
+    <div class="hint">
+      内容・開始・終了の各欄で <kbd>Enter</kbd> でも追加できます。<br>
+      予定をクリックすると左で詳細を編集できます。
+    </div>
+    </div>
+  </section>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ── Config ─────────────────────────────────────────────────
+const START_HOUR = 0, END_HOUR = 24, PX_HOUR = 60;
+const KEY = 'daySchedule.v2';
+const RESET_H = 2, RESET_M = 30;          // daily reset at 02:30
+
+// ── Helpers ────────────────────────────────────────────────
+const pad = n => String(n).padStart(2,'0');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const timeToMin = t => { const [h,m] = t.split(':').map(Number); return h*60 + (m||0); };
+const minToTime = m => { m = Math.max(0, Math.min(1439, m)); return pad(Math.floor(m/60)) + ':' + pad(m%60); };
+
+// Parse free-typed time ("9:5", "0930", "9", "21:00") → "HH:MM" or null.
+function normalizeTime(str){
+  if (str == null) return null;
+  str = String(str).trim();
+  if (!str) return null;
+  let h, m;
+  if (str.includes(':')){
+    const [a, b] = str.split(':');
+    h = parseInt(a, 10); m = parseInt(b === '' ? '0' : b, 10);
+  } else {
+    const d = str.replace(/\D/g, '');
+    if (d === '') return null;
+    if (d.length <= 2){ h = parseInt(d, 10); m = 0; }
+    else if (d.length === 3){ h = parseInt(d.slice(0,1), 10); m = parseInt(d.slice(1), 10); }
+    else { h = parseInt(d.slice(0,2), 10); m = parseInt(d.slice(2,4), 10); }
+  }
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return pad(h) + ':' + pad(m);
+}
+
+// Typed-only time input: restrict characters, format on blur (no spinner UI).
+function attachTimeInput(el){
+  el.addEventListener('input', () => {
+    let v = el.value.replace(/[^\d:]/g, '');
+    const i = v.indexOf(':');
+    if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/:/g, '');
+    el.value = v.slice(0, 5);
+  });
+  el.addEventListener('focus', () => el.classList.remove('invalid'));
+  el.addEventListener('blur', () => {
+    if (!el.value.trim()) return;
+    const n = normalizeTime(el.value);
+    if (n){ el.value = n; el.classList.remove('invalid'); }
+    else  { el.classList.add('invalid'); }
+  });
+}
+
+// Auto-grow a textarea so its box height matches the text.
+function autoGrow(el){ el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+
+function scheduleDateKey(date){
+  const x = new Date((date || new Date()).getTime());
+  if (x.getHours() < RESET_H || (x.getHours() === RESET_H && x.getMinutes() < RESET_M)) {
+    x.setDate(x.getDate() - 1);
+  }
+  return x.getFullYear() + '-' + pad(x.getMonth()+1) + '-' + pad(x.getDate());
+}
+
+// ── State + persistence (with daily reset) ─────────────────
+let scheduleDate = scheduleDateKey();
+let events = [];
+let selectedId = null;
+
+(function loadState(){
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.scheduleDate === scheduleDate && Array.isArray(o.events)) events = o.events;
+    }
+  } catch(e){}
+})();
+
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify({ scheduleDate, events })); } catch(e){}
+}
+function sortEvents(){ events.sort((a,b)=> timeToMin(a.start) - timeToMin(b.start) || timeToMin(a.end) - timeToMin(b.end)); }
+
+function toast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+
+// ── Ruler (built once) ─────────────────────────────────────
+function buildRuler(){
+  const track = document.getElementById('track');
+  const ruler = document.getElementById('ruler');
+  track.style.height = ((END_HOUR - START_HOUR) * PX_HOUR) + 'px';
+  let html = '';
+  for (let h = START_HOUR; h <= END_HOUR; h++){
+    const top = (h - START_HOUR) * PX_HOUR;
+    const sharp = (h % 6 === 0) ? ' sharp' : '';
+    html += `<div class="hour${sharp}" style="top:${top}px">`
+          +   `<span class="hour-label">${pad(h % 24)}:00</span>`
+          +   `<span class="hour-line"></span></div>`;
+  }
+  ruler.innerHTML = html;
+}
+
+// ── Overlap layout: pack overlapping events into side-by-side columns ──
+function computeColumns(list){
+  const res = {};
+  let group = [], colEnds = [], groupEnd = -1;
+  const flush = () => {
+    const n = colEnds.length;
+    group.forEach(g => { res[g.id] = { col: g._col, cols: n }; });
+    group = []; colEnds = []; groupEnd = -1;
+  };
+  for (const e of list){
+    const s = timeToMin(e.start);
+    const en = Math.max(timeToMin(e.end), s + 1);
+    if (group.length && s >= groupEnd) flush();
+    let placed = -1;
+    for (let i = 0; i < colEnds.length; i++){ if (colEnds[i] <= s){ placed = i; break; } }
+    if (placed === -1){ placed = colEnds.length; colEnds.push(en); } else { colEnds[placed] = en; }
+    e._col = placed; group.push(e); groupEnd = Math.max(groupEnd, en);
+  }
+  if (group.length) flush();
+  return res;
+}
+
+// ── Render timeline ────────────────────────────────────────
+function renderEvents(){
+  const lane = document.getElementById('lane');
+  lane.innerHTML = '';
+  document.getElementById('empty').style.display = events.length ? 'none' : 'flex';
+  document.getElementById('count').textContent = events.length + ' 件';
+
+  const layout = computeColumns(events);
+
+  events.forEach(e => {
+    const s = timeToMin(e.start), en = Math.max(timeToMin(e.end), s + 1);
+    const top = ((s - START_HOUR*60) / 60) * PX_HOUR;
+    const height = Math.max(((en - s) / 60) * PX_HOUR, 42);
+    const { col, cols } = layout[e.id];
+    const widthPct = 100 / cols;
+
+    const card = document.createElement('div');
+    card.className = 'event' + (e.id === selectedId ? ' selected' : '');
+    card.style.top    = top + 'px';
+    card.style.height = height + 'px';
+    card.style.left   = `calc(${col * widthPct}% + ${col ? 3 : 0}px)`;
+    card.style.width  = `calc(${widthPct}% - ${cols > 1 ? 5 : 0}px)`;
+
+    card.innerHTML =
+      `<span class="event-time">${e.start}–${e.end}</span>` +
+      `<span class="event-title"></span>` +
+      `<button class="event-del" type="button" aria-label="削除">✕</button>`;
+    card.querySelector('.event-title').textContent = e.title;   // details intentionally NOT shown
+
+    card.addEventListener('click', ev => {
+      if (ev.target.classList.contains('event-del')) return;
+      selectEvent(e.id);
+    });
+    card.querySelector('.event-del').addEventListener('click', ev => {
+      ev.stopPropagation(); removeEvent(e.id);
+    });
+    lane.appendChild(card);
+  });
+}
+
+// ── Selection + left inspector ─────────────────────────────
+function selectEvent(id){
+  selectedId = id;
+  renderEvents();
+  renderInspector();
+}
+
+function findCurrentEvent(){
+  const min = nowMinutes();
+  return events.find(ev => timeToMin(ev.start) <= min && min < Math.max(timeToMin(ev.end), timeToMin(ev.start) + 1));
+}
+
+function renderInspector(){
+  const host = document.getElementById('inspector');
+  let e = events.find(x => x.id === selectedId);
+  let autoShown = false;
+  if (!e){
+    e = findCurrentEvent();
+    autoShown = !!e;
+  }
+  if (!e){ host.innerHTML = ''; return; }     // nothing selected and nothing current → show nothing
+
+  host.innerHTML = `
+    <div class="insp-eyebrow">${autoShown ? '現在の予定' : '選択中の予定'}</div>
+    <div class="insp-field">
+      <label for="iTitle">内容</label>
+      <textarea class="input grow" id="iTitle" rows="1" maxlength="120"></textarea>
+    </div>
+    <div class="insp-field">
+      <label>時間 <span class="sub-label">（HH:MM を入力）</span></label>
+      <div class="time-row">
+        <div class="insp-field"><label for="iStart" class="sub-label">開始</label>
+          <input class="timeinput" id="iStart" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" autocomplete="off"></div>
+        <span class="sep">–</span>
+        <div class="insp-field"><label for="iEnd" class="sub-label">終了</label>
+          <input class="timeinput" id="iEnd" type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" autocomplete="off"></div>
+      </div>
+    </div>
+    <div class="insp-field">
+      <label for="iDetails">詳細</label>
+      <textarea class="input grow" id="iDetails" placeholder="メモ・場所・持ち物など（任意）"></textarea>
+    </div>
+    <div class="insp-field">
+      <label>タスク <span class="sub-label">（この予定で達成したいこと）</span></label>
+      <div class="task-list" id="iTaskList"></div>
+      <div class="task-add-row">
+        <input class="input" id="iTaskInput" type="text" maxlength="120"
+               placeholder="タスクを入力して追加" autocomplete="off">
+        <button class="btn-mini" id="iTaskAdd" type="button" aria-label="タスクを追加">+</button>
+      </div>
+    </div>
+    <label class="check-row" for="iDone" style="margin-bottom:2px">
+      <input type="checkbox" id="iDone"> 完了
+    </label>
+    <div class="insp-actions">
+      <button class="btn btn-primary" id="iSave">保存</button>
+      <button class="btn btn-danger" id="iDelete">削除</button>
+    </div>`;
+
+  const iTitle   = host.querySelector('#iTitle');
+  const iStart   = host.querySelector('#iStart');
+  const iEnd     = host.querySelector('#iEnd');
+  const iDetails = host.querySelector('#iDetails');
+
+  iTitle.value = e.title;
+  iStart.value = e.start;
+  iEnd.value   = e.end;
+  iDetails.value = e.details || '';
+
+  // Completion toggle — applies immediately (status, not an edit that needs Save)
+  const iDone = host.querySelector('#iDone');
+  iDone.checked = !!e.done;
+  iDone.addEventListener('change', () => { e.done = iDone.checked; save(); renderEvents(); });
+
+  // Task checklist — each task has its own checkbox; changes apply immediately.
+  if (!Array.isArray(e.tasks)) e.tasks = [];
+  const iTaskList  = host.querySelector('#iTaskList');
+  const iTaskInput = host.querySelector('#iTaskInput');
+  const iTaskAdd   = host.querySelector('#iTaskAdd');
+
+  function renderITasks(){
+    iTaskList.innerHTML = '';
+    e.tasks.forEach(t => {
+      const row = document.createElement('div');
+      row.className = 'task-item' + (t.done ? ' done' : '');
+      row.innerHTML =
+        `<input type="checkbox" class="task-check">` +
+        `<span class="task-text-static"></span>` +
+        `<button class="task-del" type="button" aria-label="タスクを削除">✕</button>`;
+      row.querySelector('.task-text-static').textContent = t.text;
+      const cb = row.querySelector('.task-check');
+      cb.checked = !!t.done;
+      cb.addEventListener('change', () => {
+        t.done = cb.checked; save(); renderITasks();
+      });
+      row.querySelector('.task-del').addEventListener('click', () => {
+        e.tasks = e.tasks.filter(x => x.id !== t.id);
+        save(); renderITasks();
+      });
+      iTaskList.appendChild(row);
+    });
+  }
+  function addITask(){
+    const v = iTaskInput.value.trim();
+    if (!v) return;
+    e.tasks.push({ id: uid(), text: v, done: false });
+    iTaskInput.value = '';
+    save(); renderITasks(); iTaskInput.focus();
+  }
+  iTaskAdd.addEventListener('click', addITask);
+  iTaskInput.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter'){ ev.preventDefault(); addITask(); }
+  });
+  renderITasks();
+
+  // Typed-only time inputs
+  attachTimeInput(iStart);
+  attachTimeInput(iEnd);
+
+  // Auto-grow: size to content now and on every keystroke
+  [iTitle, iDetails].forEach(t => { autoGrow(t); t.addEventListener('input', () => autoGrow(t)); });
+
+  host.querySelector('#iSave').addEventListener('click', () => {
+    const title = iTitle.value.trim();
+    const start = normalizeTime(iStart.value);
+    const end   = normalizeTime(iEnd.value);
+    if (!title){ flash(iTitle); return; }
+    if (!start){ flash(iStart); return; }
+    if (!end){   flash(iEnd);   return; }
+    if (timeToMin(end) <= timeToMin(start)){ flash(iEnd); return; }
+    e.title = title; e.start = start; e.end = end; e.details = iDetails.value.trim();
+    sortEvents(); save(); renderEvents(); renderInspector();
+    toast('保存しました');
+  });
+  host.querySelector('#iDelete').addEventListener('click', () => removeEvent(e.id));
+
+  // Enter saves (title textarea: prevent newline). Details: Enter = newline.
+  iTitle.addEventListener('keydown', ev => { if (ev.key === 'Enter'){ ev.preventDefault(); host.querySelector('#iSave').click(); } });
+  [iStart, iEnd].forEach(el =>
+    el.addEventListener('keydown', ev => { if (ev.key === 'Enter') host.querySelector('#iSave').click(); }));
+}
+
+// ── CRUD ───────────────────────────────────────────────────
+function removeEvent(id){
+  events = events.filter(e => e.id !== id);
+  if (selectedId === id) selectedId = null;
+  save(); renderEvents(); renderInspector();
+  toast('削除しました');
+}
+
+// ── Live "now" indicator ───────────────────────────────────
+function nowMinutes(){ const d = new Date(); return d.getHours()*60 + d.getMinutes(); }
+function renderNow(){
+  const d = new Date();
+  document.getElementById('nowline').style.top = ((nowMinutes()-START_HOUR*60)/60)*PX_HOUR + 'px';
+  document.querySelector('#nowline .now-pill').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
+  document.getElementById('liveClock').textContent = pad(d.getHours())+':'+pad(d.getMinutes());
+  if (!selectedId) renderInspector();
+}
+function scrollToTime(min){
+  const sc = document.getElementById('trackScroll');
+  const top = ((min - START_HOUR*60)/60)*PX_HOUR;
+  sc.scrollTo({ top: Math.max(0, top - sc.clientHeight*0.35), behavior: 'smooth' });
+}
+
+// ── Daily reset watcher ────────────────────────────────────
+function checkReset(){
+  const cur = scheduleDateKey();
+  if (cur !== scheduleDate){
+    scheduleDate = cur; events = []; selectedId = null;
+    save(); renderEvents(); renderInspector();
+    toast('2:30 — スケジュールをリセットしました');
+  }
+}
+
+// ── Right-form handling ────────────────────────────────────
+const rTitle   = document.getElementById('rTitle');
+const rStart   = document.getElementById('rStart');
+const rEnd     = document.getElementById('rEnd');
+const rDetails = document.getElementById('rDetails');
+const rTaskList  = document.getElementById('rTaskList');
+const rTaskInput = document.getElementById('rTaskInput');
+const rTaskAdd   = document.getElementById('rTaskAdd');
+
+attachTimeInput(rStart);
+attachTimeInput(rEnd);
+
+// Pending tasks for the event currently being composed in the right form.
+let rTasks = [];
+
+function renderRTasks(){
+  rTaskList.innerHTML = '';
+  rTasks.forEach((t, idx) => {
+    const row = document.createElement('div');
+    row.className = 'task-item';
+    row.innerHTML =
+      `<span class="task-bullet"></span>` +
+      `<span class="task-text-static"></span>` +
+      `<button class="task-del" type="button" aria-label="タスクを削除">✕</button>`;
+    row.querySelector('.task-text-static').textContent = t;
+    row.querySelector('.task-del').addEventListener('click', () => {
+      rTasks.splice(idx, 1); renderRTasks();
+    });
+    rTaskList.appendChild(row);
+  });
+}
+
+function addRTask(){
+  const v = rTaskInput.value.trim();
+  if (!v) return;
+  rTasks.push(v);
+  rTaskInput.value = '';
+  renderRTasks();
+  rTaskInput.focus();
+}
+rTaskAdd.addEventListener('click', addRTask);
+rTaskInput.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter'){ ev.preventDefault(); addRTask(); }
+});
+
+function flash(el){ el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); el.focus(); }
+
+function submit(){
+  const title = rTitle.value.trim();
+  const start = normalizeTime(rStart.value);
+  const end   = normalizeTime(rEnd.value);
+  if (!title){ flash(rTitle); return; }
+  if (!start){ flash(rStart); return; }
+  if (!end){   flash(rEnd);   return; }
+  if (timeToMin(end) <= timeToMin(start)){ flash(rEnd); return; }
+
+  const tasks = rTasks.map(text => ({ id: uid(), text, done: false }));
+  events.push({ id: uid(), title, start, end, details: rDetails.value.trim(), tasks });
+  sortEvents(); save(); renderEvents(); scrollToTime(timeToMin(start));
+
+  // Chain the next entry: start = previous end, end = +1h.
+  rTitle.value = ''; rDetails.value = '';
+  rTasks = []; renderRTasks();
+  rStart.value = start ? end : '';
+  rEnd.value   = end ? minToTime(timeToMin(end) + 60) : '';
+  rTitle.focus();
+}
+
+document.getElementById('addBtn').addEventListener('click', submit);
+[rTitle, rStart, rEnd].forEach(el =>
+  el.addEventListener('keydown', ev => { if (ev.key === 'Enter') submit(); }));
+
+// ── Add-form toggle (top of right panel) ───────────────────
+const addToggle = document.getElementById('addToggle');
+const addForm   = document.getElementById('addForm');
+const appEl     = document.querySelector('.app');
+function setAddForm(open){
+  appEl.classList.toggle('form-open', open);
+  addToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open){ addForm.removeAttribute('hidden'); rTitle.focus(); }
+  else { addForm.setAttribute('hidden', ''); }
+}
+addToggle.addEventListener('click', () => setAddForm(!appEl.classList.contains('form-open')));
+
+// ── Init ───────────────────────────────────────────────────
+(function init(){
+  const d = new Date();
+  document.getElementById('topDate').textContent =
+    d.toLocaleDateString('ja-JP', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+
+  const nowMin = nowMinutes();
+  rStart.value = minToTime(nowMin);
+  rEnd.value   = minToTime(nowMin + 60);
+
+  buildRuler();
+  renderEvents();
+  renderInspector();
+  renderNow();
+
+  const sc = document.getElementById('trackScroll');
+  sc.scrollTop = Math.max(0, ((nowMin-START_HOUR*60)/60)*PX_HOUR - sc.clientHeight*0.35);
+
+  setInterval(renderNow, 20000);
+  setInterval(checkReset, 30000);
+})();
+</script>
+</body>
+</html>
