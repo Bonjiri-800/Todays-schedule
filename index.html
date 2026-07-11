@@ -904,7 +904,10 @@ document.querySelector('.left').addEventListener('click', ev => {
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
   import { getAnalytics, isSupported as analyticsIsSupported } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-analytics.js";
   import {
-    getAuth,
+    initializeAuth,
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
+    inMemoryPersistence,
     onAuthStateChanged,
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
@@ -933,7 +936,15 @@ document.querySelector('.left').addEventListener('click', ev => {
   };
 
   const app  = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+  // Mobile Safari (and some in-app browsers, especially in Private Browsing)
+  // have a known bug where Firebase Auth's default IndexedDB persistence
+  // hangs forever with no error — this is exactly the "connection failed"
+  // timeout you keep seeing. Falling back through localStorage, then plain
+  // in-memory storage, means login still completes even where IndexedDB is
+  // broken (in-memory just won't survive a page reload).
+  const auth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence]
+  });
   const db   = getFirestore(app);
 
   // Analytics is optional and unrelated to login/sync — guarded so a blocked
