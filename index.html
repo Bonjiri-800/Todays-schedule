@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <title>今日の予定</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,6 +37,8 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
+.hidden{display:none!important}
+
 /* ── Top bar ─────────────────────────────── */
 .topbar{display:flex;align-items:baseline;gap:16px;padding:16px 26px;
   border-bottom:1px solid var(--line);background:var(--panel)}
@@ -49,6 +51,14 @@ body{
   display:flex;align-items:center;gap:7px}
 .live-clock::before{content:"";width:7px;height:7px;border-radius:50%;
   background:var(--now);box-shadow:0 0 0 3px rgba(239,139,59,.18)}
+
+.account{display:flex;align-items:center;gap:9px}
+.account-email{font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout-btn{font-family:var(--body);font-size:11.5px;font-weight:500;color:var(--muted);
+  background:var(--soft);border:1px solid var(--line);border-radius:7px;padding:5px 10px;
+  cursor:pointer;transition:background .15s,color .15s}
+.logout-btn:hover{background:#fdecea;color:var(--danger);border-color:#f6cfc9}
 
 /* ── 3-column frame ──────────────────────── */
 .app{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,4fr) auto;min-height:0}
@@ -207,6 +217,7 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 .btn{font-family:var(--disp);font-size:14px;font-weight:600;border:none;border-radius:9px;
   padding:12px;cursor:pointer;transition:opacity .15s,transform .08s}
 .btn:active{transform:scale(.985)}
+.btn:disabled{opacity:.5;cursor:default;transform:none}
 .btn-primary{background:var(--ink);color:#fff;width:100%}
 .btn-primary:hover{opacity:.9}
 .btn-danger{color:var(--danger);background:#fdecea;border:1px solid #f6cfc9}
@@ -231,6 +242,29 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 
+/* ── Auth screen ──────────────────────────── */
+#authOverlay{position:fixed;inset:0;z-index:500;background:rgba(29,33,43,.55);
+  display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+.auth-panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  padding:28px 26px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(29,33,43,.28)}
+.auth-panel h1{font-family:var(--disp);font-size:19px;font-weight:700;margin-bottom:5px}
+.auth-panel h1 .dot{color:var(--now)}
+.auth-panel .lead{font-size:12.5px;color:var(--muted);margin-bottom:22px;line-height:1.55}
+.auth-status{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-bottom:14px}
+.auth-error{font-size:12.5px;color:var(--danger);background:#fdecea;border:1px solid #f6cfc9;
+  border-radius:8px;padding:9px 12px;margin-bottom:14px;line-height:1.5}
+.auth-actions{display:flex;gap:8px}
+.auth-actions .btn{flex:1}
+.auth-forgot{display:block;text-align:center;margin-top:14px;background:none;border:none;
+  color:var(--sel);font-size:12px;text-decoration:underline;cursor:pointer;font-family:var(--body)}
+
+/* ── Sync status banner ───────────────────── */
+#syncErrorBanner{position:fixed;top:0;left:0;right:0;z-index:400;background:var(--danger);
+  color:#fff;padding:10px 20px;font-size:12.5px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px}
+#syncErrorBanner button{background:none;border:none;color:#fff;text-decoration:underline;
+  cursor:pointer;font-size:12px;font-family:var(--body);flex-shrink:0}
+
 /* ── Tablet / narrow desktop ─────────────── */
 @media (max-width:920px) and (min-width:641px){
   body{overflow:auto}
@@ -251,6 +285,7 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
   .topdate{font-size:11.5px}
   .resetnote{display:none}                 /* secondary info, saves space on phones */
   .live-clock{font-size:12.5px;margin-left:auto}
+  .account-email{max-width:120px}
 
   .app,.app.form-open{grid-template-columns:1fr;min-height:0}
   .left{order:3;border-right:none;border-top:1px solid var(--line);padding:18px 16px}
@@ -297,6 +332,7 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
     padding:8px 12px;cursor:pointer;order:2}
   .mobile-add-btn:active{opacity:.85}
   .live-clock{order:3}
+  .account{order:4}
   body.sheet-open .mobile-add-btn{display:none} /* avoid a duplicate trigger while a sheet is open */
 
   /* The inline accordion toggle is replaced by the top-bar button */
@@ -337,7 +373,41 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 </head>
 <body>
 
-<div class="topbar">
+<!-- ══════════════ Auth screen (shown until logged in) ══════════════ -->
+<div id="authOverlay">
+  <div class="auth-panel">
+    <h1>今日の予定<span class="dot">.</span></h1>
+    <p class="lead">ログインすると、予定を複数のデバイス間で同期できます。</p>
+
+    <div class="field">
+      <label for="authEmail">メールアドレス</label>
+      <input class="input" type="email" id="authEmail" placeholder="you@example.com" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="authPassword">パスワード</label>
+      <input class="input" type="password" id="authPassword" placeholder="6文字以上" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')handleLogin()">
+    </div>
+
+    <div id="authError" class="auth-error hidden"></div>
+    <div id="authStatus" class="auth-status">接続中…</div>
+
+    <div class="auth-actions">
+      <button class="btn" style="background:var(--soft);border:1px solid var(--line);color:var(--ink)"
+        id="authSignupBtn" onclick="handleSignup()" disabled>新規登録</button>
+      <button class="btn btn-primary" id="authLoginBtn" onclick="handleLogin()" disabled>ログイン</button>
+    </div>
+    <button class="auth-forgot" onclick="handleForgotPassword()">パスワードを忘れた場合</button>
+  </div>
+</div>
+
+<!-- Persistent data-sync error banner (stays until dismissed, unlike a toast) -->
+<div id="syncErrorBanner" class="hidden">
+  <span id="syncErrorText"></span>
+  <button onclick="document.getElementById('syncErrorBanner').classList.add('hidden')">閉じる</button>
+</div>
+
+<div class="topbar hidden" id="topbar">
   <span class="brand">今日の予定<span class="dot">.</span></span>
   <span class="topdate" id="topDate"></span>
   <span class="spacer"></span>
@@ -346,9 +416,13 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
     <span class="at-icon" style="display:inline-flex;width:14px;height:14px;align-items:center;justify-content:center">+</span>予定を追加
   </button>
   <span class="live-clock" id="liveClock">--:--</span>
+  <span class="account">
+    <span class="account-email" id="userEmail"></span>
+    <button class="logout-btn" onclick="handleLogout()">ログアウト</button>
+  </span>
 </div>
 
-<div class="app">
+<div class="app hidden" id="appMain">
 
   <!-- LEFT — detail inspector (empty until selection) -->
   <section class="col left">
@@ -438,7 +512,6 @@ textarea.input.grow{min-height:42px;overflow:hidden;line-height:1.5}
 
 // ── Config ─────────────────────────────────────────────────
 const START_HOUR = 0, END_HOUR = 24, PX_HOUR = 60;
-const KEY = 'daySchedule.v2';
 const RESET_H = 2, RESET_M = 30;          // daily reset at 02:30
 
 // ── Helpers ────────────────────────────────────────────────
@@ -496,23 +569,34 @@ function scheduleDateKey(date){
 }
 
 // ── State + persistence (with daily reset) ─────────────────
+// Data now lives in Firestore (see the Firebase block below), keyed by
+// account, so today's schedule follows you across devices instead of
+// staying trapped in one browser's localStorage.
 let scheduleDate = scheduleDateKey();
 let events = [];
 let selectedId = null;
 
-(function loadState(){
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      const o = JSON.parse(raw);
-      if (o && o.scheduleDate === scheduleDate && Array.isArray(o.events)) events = o.events;
-    }
-  } catch(e){}
-})();
-
 function save(){
-  try { localStorage.setItem(KEY, JSON.stringify({ scheduleDate, events })); } catch(e){}
+  persistToCloud();
 }
+
+// Called after login, and again whenever another device changes the data.
+function applyCloudData(data){
+  const cur = scheduleDateKey();
+  if (data && data.scheduleDate === cur && Array.isArray(data.events)) {
+    scheduleDate = cur;
+    events = data.events;
+  } else {
+    // Stored data is from a previous day (or missing) → today starts empty,
+    // same as the original daily-reset behaviour.
+    scheduleDate = cur;
+    events = [];
+  }
+  selectedId = null;
+  renderEvents();
+  renderInspector();
+}
+
 function sortEvents(){ events.sort((a,b)=> timeToMin(a.start) - timeToMin(b.start) || timeToMin(a.end) - timeToMin(b.end)); }
 
 function toast(msg){
@@ -789,7 +873,8 @@ document.querySelector('.left').addEventListener('click', ev => {
   if (isMobile() && ev.target === ev.currentTarget){ selectedId = null; renderEvents(); renderInspector(); }
 });
 
-// ── Init ───────────────────────────────────────────────────
+// ── Init (UI wiring runs immediately; today's data itself loads after
+//    login — see applyCloudData() and the Firebase block below) ───────
 (function init(){
   const d = new Date();
   document.getElementById('topDate').textContent =
@@ -810,6 +895,240 @@ document.querySelector('.left').addEventListener('click', ev => {
   setInterval(renderNow, 20000);
   setInterval(checkReset, 30000);
 })();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════
+     Firebase: Authentication + Firestore sync
+     ══════════════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getAnalytics, isSupported as analyticsIsSupported } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-analytics.js";
+  import {
+    getAuth,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    createUserWithEmailAndPassword,
+    signOut,
+    sendPasswordResetEmail
+  } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
+  import {
+    getFirestore,
+    doc,
+    getDoc,
+    setDoc,
+    onSnapshot,
+    serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  // Values like apiKey are meant to be public and are safe to embed directly
+  // in the HTML — actual access control happens in Firestore Security Rules.
+  const firebaseConfig = {
+    apiKey: "AIzaSyCnqqNQrHbJViYAN4zmbMWQD6sVhBvX-VU",
+    authDomain: "today-s-schedule-9da20.firebaseapp.com",
+    projectId: "today-s-schedule-9da20",
+    storageBucket: "today-s-schedule-9da20.firebasestorage.app",
+    messagingSenderId: "462128849092",
+    appId: "1:462128849092:web:d6b1148a4cc56f91a62991",
+    measurementId: "G-Z8W80CYB05"
+  };
+
+  const app  = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  // Analytics is optional and unrelated to login/sync — guarded so a blocked
+  // or unsupported environment (ad blockers, some in-app browsers) can never
+  // break authentication.
+  analyticsIsSupported().then(ok => { if (ok) { try { getAnalytics(app); } catch(e) {} } }).catch(()=>{});
+
+  let currentUID = null;
+  let unsubscribeSnapshot = null;
+  let suppressNextSnapshotRender = false;
+
+  const AUTH_ERROR_MESSAGES = {
+    'auth/invalid-email':        'メールアドレスの形式が正しくありません。',
+    'auth/user-not-found':       'アカウントが見つかりません。「新規登録」をお試しください。',
+    'auth/wrong-password':       'パスワードが違います。',
+    'auth/invalid-credential':   'メールアドレスまたはパスワードが違います。',
+    'auth/email-already-in-use': 'このメールアドレスは既に登録されています。「ログイン」をお試しください。',
+    'auth/weak-password':        'パスワードは6文字以上にしてください。',
+    'auth/too-many-requests':    '試行回数が多すぎます。しばらくしてから再度お試しください。',
+  };
+
+  const authStatusEl = document.getElementById('authStatus');
+  const authErrorEl  = document.getElementById('authError');
+  const loginBtnEl   = document.getElementById('authLoginBtn');
+  const signupBtnEl  = document.getElementById('authSignupBtn');
+
+  function showAuthError(err) {
+    authErrorEl.textContent = AUTH_ERROR_MESSAGES[err.code] || `エラー: ${err.message}`;
+    authErrorEl.classList.remove('hidden');
+  }
+  function clearAuthError() { authErrorEl.classList.add('hidden'); }
+  function setAuthBusy(busy) { loginBtnEl.disabled = busy; signupBtnEl.disabled = busy; }
+
+  // Buttons start disabled (see HTML) so a slow or failed load never looks
+  // like an unresponsive tap.
+  function markReady() {
+    authStatusEl.classList.add('hidden');
+    loginBtnEl.disabled = false;
+    signupBtnEl.disabled = false;
+  }
+  function markFailed(message) {
+    authStatusEl.classList.add('hidden');
+    authErrorEl.textContent = message;
+    authErrorEl.classList.remove('hidden');
+    loginBtnEl.disabled = true;
+    signupBtnEl.disabled = true;
+  }
+
+  // Persistent banner for Firestore (data sync) problems — stays on screen
+  // until dismissed, unlike a toast, so the exact error text is readable.
+  function showSyncError(message) {
+    document.getElementById('syncErrorText').textContent = '同期エラー: ' + message;
+    document.getElementById('syncErrorBanner').classList.remove('hidden');
+  }
+  function clearSyncError() {
+    document.getElementById('syncErrorBanner').classList.add('hidden');
+  }
+
+  const readinessTimeout = setTimeout(() => {
+    markFailed('ログインサービスに接続できませんでした。通信環境を確認し、ページを再読み込みしてください。');
+  }, 8000);
+
+  window.addEventListener('error', (e) => {
+    markFailed('スクリプトの読み込みに失敗しました(' + (e.message || 'unknown error') + ')。ページを再読み込みしてください。');
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    markFailed('エラーが発生しました(' + (e.reason?.message || e.reason || 'unknown error') + ')。ページを再読み込みしてください。');
+  });
+
+  window.handleLogin = async function() {
+    clearAuthError();
+    const email = document.getElementById('authEmail').value.trim();
+    const pass  = document.getElementById('authPassword').value;
+    if (!email || !pass) { showAuthError({code:'', message:'メールアドレスとパスワードを入力してください。'}); return; }
+    setAuthBusy(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+      // onAuthStateChanged handles the screen switch from here
+    } catch (err) {
+      showAuthError(err);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  window.handleSignup = async function() {
+    clearAuthError();
+    const email = document.getElementById('authEmail').value.trim();
+    const pass  = document.getElementById('authPassword').value;
+    if (!email || !pass) { showAuthError({code:'', message:'メールアドレスとパスワードを入力してください。'}); return; }
+    setAuthBusy(true);
+    try {
+      await createUserWithEmailAndPassword(auth, email, pass);
+    } catch (err) {
+      showAuthError(err);
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  window.handleForgotPassword = async function() {
+    clearAuthError();
+    const email = document.getElementById('authEmail').value.trim();
+    if (!email) { showAuthError({code:'', message:'まずメールアドレスを入力してください。'}); return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast('パスワード再設定メールを送信しました。');
+    } catch (err) {
+      showAuthError(err);
+    }
+  };
+
+  window.handleLogout = async function() {
+    await signOut(auth);
+  };
+
+  // Writes to Firestore — called from the app's own save() function.
+  window.persistToCloud = async function() {
+    if (!currentUID) return;
+    suppressNextSnapshotRender = true; // avoid a flicker from re-rendering our own write
+    try {
+      await setDoc(doc(db, 'users', currentUID), {
+        scheduleDate: scheduleDate,
+        events: events,
+        updatedAt: serverTimestamp()
+      });
+      clearSyncError();
+    } catch (err) {
+      showSyncError(err.message + (err.code ? ' (' + err.code + ')' : ''));
+    }
+  };
+
+  async function startSessionFor(user) {
+    currentUID = user.uid;
+
+    document.getElementById('authOverlay').classList.add('hidden');
+    document.getElementById('topbar').classList.remove('hidden');
+    document.getElementById('appMain').classList.remove('hidden');
+    document.getElementById('userEmail').textContent = user.email;
+
+    const ref = doc(db, 'users', currentUID);
+
+    // Initial load, wrapped in try/catch: an error here (Firestore database
+    // not created yet, or security rules denying access) used to fail
+    // silently — the app would just show up empty with no explanation.
+    try {
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        applyCloudData(snap.data());
+      } else {
+        // First login: create an empty document for today
+        const initial = { scheduleDate: scheduleDateKey(), events: [], updatedAt: serverTimestamp() };
+        await setDoc(ref, initial);
+        applyCloudData(initial);
+      }
+      clearSyncError();
+    } catch (err) {
+      showSyncError(err.message + (err.code ? ' (' + err.code + ')' : ''));
+      return; // don't attach a listener on top of a broken initial load
+    }
+
+    // Reflect changes from other devices in real time. The third argument is
+    // an error callback — without it, a permission/connection problem here
+    // would also fail completely silently.
+    unsubscribeSnapshot = onSnapshot(ref, (docSnap) => {
+      if (suppressNextSnapshotRender) { suppressNextSnapshotRender = false; return; }
+      if (docSnap.exists()) applyCloudData(docSnap.data());
+      clearSyncError();
+    }, (err) => {
+      showSyncError(err.message + (err.code ? ' (' + err.code + ')' : ''));
+    });
+  }
+
+  function endSession() {
+    currentUID = null;
+    if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+    scheduleDate = scheduleDateKey();
+    events = [];
+    selectedId = null;
+
+    document.getElementById('topbar').classList.add('hidden');
+    document.getElementById('appMain').classList.add('hidden');
+    document.getElementById('authEmail').value = '';
+    document.getElementById('authPassword').value = '';
+    clearAuthError();
+    clearSyncError();
+    document.getElementById('authOverlay').classList.remove('hidden');
+  }
+
+  onAuthStateChanged(auth, (user) => {
+    clearTimeout(readinessTimeout);
+    markReady();
+    if (user) startSessionFor(user);
+    else endSession();
+  });
 </script>
 </body>
 </html>
